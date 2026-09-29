@@ -6,7 +6,14 @@ import {
   DatabaseSearch20Regular,
   Search20Regular
 } from '@fluentui/react-icons'
-import type { NoticeSnapshot } from '@jarvis/contracts'
+import type {
+  FeasibilityAssessment,
+  NoticeDetail,
+  NoticeSnapshot,
+  ProcurementNotice
+} from '@jarvis/contracts'
+import { AssessmentPanel } from './AssessmentPanel'
+import { ProjectDetailPanel } from './ProjectDetailPanel'
 
 const emptySnapshot: NoticeSnapshot = { notices: [], sources: [], refreshedAt: '' }
 
@@ -17,12 +24,19 @@ export function ProjectCommandCenter(): JSX.Element {
   const [relevantOnly, setRelevantOnly] = useState(true)
   const [message, setMessage] = useState('正在读取本地公告库')
 
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<NoticeDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const [assessment, setAssessment] = useState<FeasibilityAssessment | null>(null)
+  const [assessmentLoading, setAssessmentLoading] = useState(false)
+
   useEffect(() => {
     window.jarvis.listNotices()
       .then(async (data) => {
         if (data.refreshedAt) {
           setSnapshot(data)
-          setMessage('已读取本地公告快照')
+          setMessage(`已读取本地公告快照，共 ${data.notices.length} 条`)
           return
         }
         setMessage('首次进入，正在低频读取两个政府采购官网')
@@ -59,12 +73,50 @@ export function ProjectCommandCenter(): JSX.Element {
     }
   }
 
+  const openDetail = async (notice: ProcurementNotice): Promise<void> => {
+    setSelectedId(notice.id)
+    setDetail(null)
+    setAssessment(null)
+    setDetailLoading(true)
+    try {
+      const result = await window.jarvis.getNoticeDetail(notice.id)
+      setDetail(result)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '读取详情失败')
+      setSelectedId(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const closeDetail = (): void => {
+    setSelectedId(null)
+    setDetail(null)
+    setAssessment(null)
+  }
+
+  const runAssessment = async (): Promise<void> => {
+    if (!selectedId) return
+    setAssessmentLoading(true)
+    setAssessment(null)
+    try {
+      const result = await window.jarvis.runFeasibility(selectedId)
+      setAssessment(result)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '可投性诊断失败')
+    } finally {
+      setAssessmentLoading(false)
+    }
+  }
+
+  const closeAssessment = (): void => setAssessment(null)
+
   const refreshedAt = snapshot.refreshedAt
     ? new Date(snapshot.refreshedAt).toLocaleString('zh-CN', { hour12: false })
     : '尚未刷新'
 
   return (
-    <section className="project-workbench">
+    <section className="project-workbench project-workbench--with-detail">
       <header className="project-workbench__header">
         <div>
           <span className="section-heading__label">JARVIS 前线</span>
@@ -87,56 +139,99 @@ export function ProjectCommandCenter(): JSX.Element {
         <span className="project-source-strip__time">最近刷新：{refreshedAt}</span>
       </div>
 
-      <div className="project-toolbar">
-        <label className="project-search">
-          <Search20Regular />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、采购人或关键词" />
-        </label>
-        <label className="filter-toggle">
-          <input checked={relevantOnly} onChange={(event) => setRelevantOnly(event.target.checked)} type="checkbox" />
-          仅看信息化机会
-        </label>
-        <span className="project-toolbar__count">显示 {visible.length} / {snapshot.notices.length} 条</span>
+      <div className="project-workbench__body">
+        <div className="project-workbench__list-column">
+          <div className="project-toolbar">
+            <label className="project-search">
+              <Search20Regular />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、采购人或关键词" />
+            </label>
+            <label className="filter-toggle">
+              <input checked={relevantOnly} onChange={(event) => setRelevantOnly(event.target.checked)} type="checkbox" />
+              仅看信息化机会
+            </label>
+            <span className="project-toolbar__count">显示 {visible.length} / {snapshot.notices.length} 条</span>
+          </div>
+
+          <div className="project-message"><DatabaseSearch20Regular /> {message}</div>
+
+          {visible.length === 0 ? (
+            <div className="empty-state project-empty">
+              <DatabaseSearch20Regular />
+              <strong>{snapshot.notices.length === 0 ? '本地还没有公告数据' : '当前条件没有匹配项目'}</strong>
+              <span>{snapshot.notices.length === 0 ? '点击“刷新公告”开始读取公开信息' : '可关闭信息化筛选或更换关键词'}</span>
+            </div>
+          ) : (
+            <div className="notice-list">
+              {visible.slice(0, 40).map((notice) => {
+                const active = notice.id === selectedId
+                return (
+                  <article
+                    className={active ? 'notice-card notice-card--active' : 'notice-card'}
+                    key={`${notice.source}:${notice.id}`}
+                  >
+                    <button
+                      className="notice-card__main"
+                      onClick={() => void openDetail(notice)}
+                      type="button"
+                    >
+                      <div className="notice-card__badges">
+                        <span>{notice.sourceName}</span>
+                        <span>{notice.region}</span>
+                        <span>{notice.noticeType}</span>
+                      </div>
+                      <h3>{notice.title}</h3>
+                      <p>{notice.buyer}</p>
+                      {notice.matchedKeywords.length > 0 && (
+                        <div className="notice-card__keywords">
+                          {notice.matchedKeywords.slice(0, 5).map((keyword) => <span key={keyword}>{keyword}</span>)}
+                        </div>
+                      )}
+                    </button>
+                    <div className="notice-card__facts">
+                      <span><CalendarClock20Regular /> 发布于 {notice.publishedAt}</span>
+                      <span>预算：{notice.budget}</span>
+                      <span>截止：{notice.deadline}</span>
+                    </div>
+                    <div className="notice-card__actions">
+                      <button
+                        className="link-action"
+                        onClick={() => void openDetail(notice)}
+                        type="button"
+                      >
+                        查看详情
+                      </button>
+                      <button
+                        className="secondary-action"
+                        onClick={() => window.jarvis.openExternal(notice.url)}
+                        type="button"
+                      >
+                        官网核验 <ArrowUpRight20Regular />
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <ProjectDetailPanel
+          noticeId={selectedId}
+          detail={detail}
+          loading={detailLoading}
+          snapshot={snapshot}
+          assessing={assessmentLoading}
+          onRunAssessment={runAssessment}
+          onClose={closeDetail}
+        />
+
+        <AssessmentPanel
+          assessment={assessment}
+          loading={assessmentLoading}
+          onClose={closeAssessment}
+        />
       </div>
-
-      <div className="project-message"><DatabaseSearch20Regular /> {message}</div>
-
-      {visible.length === 0 ? (
-        <div className="empty-state project-empty">
-          <DatabaseSearch20Regular />
-          <strong>{snapshot.notices.length === 0 ? '本地还没有公告数据' : '当前条件没有匹配项目'}</strong>
-          <span>{snapshot.notices.length === 0 ? '点击“刷新公告”开始读取公开信息' : '可关闭信息化筛选或更换关键词'}</span>
-        </div>
-      ) : (
-        <div className="notice-list">
-          {visible.slice(0, 40).map((notice) => (
-            <article className="notice-card" key={`${notice.source}:${notice.id}`}>
-              <div className="notice-card__main">
-                <div className="notice-card__badges">
-                  <span>{notice.sourceName}</span>
-                  <span>{notice.region}</span>
-                  <span>{notice.noticeType}</span>
-                </div>
-                <h3>{notice.title}</h3>
-                <p>{notice.buyer}</p>
-                {notice.matchedKeywords.length > 0 && (
-                  <div className="notice-card__keywords">
-                    {notice.matchedKeywords.slice(0, 5).map((keyword) => <span key={keyword}>{keyword}</span>)}
-                  </div>
-                )}
-              </div>
-              <div className="notice-card__facts">
-                <span><CalendarClock20Regular /> 发布于 {notice.publishedAt}</span>
-                <span>预算：{notice.budget}</span>
-                <span>截止：{notice.deadline}</span>
-              </div>
-              <button className="secondary-action" onClick={() => window.jarvis.openExternal(notice.url)} type="button">
-                官网核验 <ArrowUpRight20Regular />
-              </button>
-            </article>
-          ))}
-        </div>
-      )}
     </section>
   )
 }

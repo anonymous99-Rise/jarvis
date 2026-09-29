@@ -13,6 +13,9 @@ import {
   type MemoryInput,
   type MemoryItem,
   type NoticeSnapshot,
+  type NoticeDetail,
+  type FeasibilityAssessment,
+  type TenderFileStatus,
   type VoiceStatus,
   type WakeSource,
   type ApprovalInput,
@@ -45,6 +48,14 @@ const api = {
   saveMemory: (input: MemoryInput): Promise<MemoryItem> => ipcRenderer.invoke(IPC_CHANNELS.memoriesSave, input),
   listNotices: (): Promise<NoticeSnapshot> => ipcRenderer.invoke(IPC_CHANNELS.noticesList),
   refreshNotices: (): Promise<NoticeSnapshot> => ipcRenderer.invoke(IPC_CHANNELS.noticesRefresh),
+  getNoticeDetail: (noticeId: string): Promise<NoticeDetail> =>
+    ipcRenderer.invoke(IPC_CHANNELS.noticesDetail, noticeId),
+  runFeasibility: (noticeId: string): Promise<FeasibilityAssessment> =>
+    ipcRenderer.invoke(IPC_CHANNELS.feasibilityRun, noticeId),
+  getFeasibility: (noticeId: string): Promise<FeasibilityAssessment | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.feasibilityGet, noticeId),
+  getTenderFileStatus: (noticeId: string): Promise<TenderFileStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.tenderFileStatus, noticeId),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
   wakeAssistant: (source: WakeSource = 'button'): Promise<{ triggered: boolean; status: VoiceStatus }> =>
     ipcRenderer.invoke(IPC_CHANNELS.voiceWake, source),

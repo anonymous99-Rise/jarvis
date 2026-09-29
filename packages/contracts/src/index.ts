@@ -16,6 +16,10 @@ export const IPC_CHANNELS = {
   memoriesSave: 'memories:save',
   noticesList: 'notices:list',
   noticesRefresh: 'notices:refresh',
+  noticesDetail: 'notices:detail',
+  feasibilityRun: 'feasibility:run',
+  feasibilityGet: 'feasibility:get',
+  tenderFileStatus: 'tender-file:status',
   openExternal: 'app:open-external',
   voiceWake: 'voice:wake',
   voiceStatus: 'voice:status',
@@ -140,6 +144,67 @@ export type NoticeSnapshot = {
   refreshedAt: string
 }
 
+export type FactStatus = 'verified' | 'pending' | 'missing'
+
+// 每项事实自带来源与核验信息；status 为 missing 时 value 与 sourceUrl 为空字符串
+export type SourcedFact = {
+  value: string
+  sourceUrl: string
+  fetchedAt: string
+  status: FactStatus
+}
+
+export type NoticeDetail = {
+  noticeId: string
+  projectCode: SourcedFact
+  budget: SourcedFact
+  buyer: SourcedFact
+  constructionSummary: SourcedFact
+  qualification: SourcedFact
+  registrationDeadline: SourcedFact
+  bidDeadline: SourcedFact
+}
+
+export type FeasibilityConclusion = '建议参与' | '进一步核实' | '不建议参与'
+
+export type HardGateName =
+  | '资格'
+  | '案例时限'
+  | '厂商授权'
+  | '演示环境'
+  | '地域交付'
+  | '截止时间'
+  | '预算结构'
+
+export type HardGateResult = 'pass' | 'fail'
+
+export type HardGate = {
+  name: HardGateName
+  result: HardGateResult
+  reason: string
+}
+
+export type FeasibilityAssessment = {
+  noticeId: string
+  conclusion: FeasibilityConclusion
+  confidence: number // 0~1
+  hardGates: HardGate[]
+  risks: string[]
+  evidence: SourcedFact[]
+  recommendedActions: string[]
+  assessedAt: string
+}
+
+export type TenderFileState = 'not-downloaded' | 'downloading' | 'downloaded' | 'submitted'
+
+export type TenderFileStatus = {
+  noticeId: string
+  state: TenderFileState
+  filePath?: string
+  message?: string
+  updatedAt: string
+}
+
 export type WakeSource = 'shortcut' | 'button' | 'wakeword'
 
 export type VoicePhase = 'idle' | 'speaking' | 'listening' | 'paused'
@@ -220,6 +285,10 @@ export interface JarvisDesktopApi {
   saveMemory(input: MemoryInput): Promise<MemoryItem>
   listNotices(): Promise<NoticeSnapshot>
   refreshNotices(): Promise<NoticeSnapshot>
+  getNoticeDetail(noticeId: string): Promise<NoticeDetail>
+  runFeasibility(noticeId: string): Promise<FeasibilityAssessment>
+  getFeasibility(noticeId: string): Promise<FeasibilityAssessment | null>
+  getTenderFileStatus(noticeId: string): Promise<TenderFileStatus>
   openExternal(url: string): Promise<void>
   wakeAssistant(source?: WakeSource): Promise<{ triggered: boolean; status: VoiceStatus }>
   getVoiceStatus(): Promise<VoiceStatus>
