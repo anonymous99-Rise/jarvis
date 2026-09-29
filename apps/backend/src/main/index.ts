@@ -2,14 +2,15 @@ import { app, dialog, globalShortcut, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { IPC_CHANNELS, type AssistantState, type VoiceStatus, type WakeSource } from '@jarvis/contracts'
-import type { ApprovalInput, ChatInput, MemoryInput, ProposalInput, ProviderInput } from '@jarvis/contracts'
+import type { ApprovalInput, ChatInput, FeasibilityAssessment, MemoryInput, ProposalInput, ProviderInput } from '@jarvis/contracts'
 import { getKnowledgeStatus, rebuildKnowledgeIndex, searchKnowledge } from '../services/knowledge/knowledgeService'
 import { listMemories, saveMemory } from '../services/memory/memoryRepository'
 import { activateProvider, listProviders, saveProvider, testProvider } from '../services/models/providerRepository'
 import { chatWithActiveProvider } from '../services/models/modelGateway'
 import { listNotices, refreshNotices } from '../services/crawler/crawlerService'
-import { fetchNingxiaDetail } from '../services/crawler/ningxiaDetail'
+import { getNoticeDetail } from '../services/crawler/noticeDetailService'
 import { createDownloadManager, type DownloadManager } from '../services/download/downloadManager'
+import { runFeasibilityAssessment } from '../services/assessment/feasibilityEngine'
 import { createTray } from './tray'
 import { updateTrayListening } from './tray'
 import { createMainWindow, getMainWindow, setQuitting, showMainWindow } from './window'
@@ -35,6 +36,8 @@ const voiceController = new VoiceController(undefined, (status: VoiceStatus) => 
 const voiceSidecar = new VoiceSidecarManager()
 const approvalService = new ApprovalService()
 let tenderDownloads: DownloadManager
+// 演示版内存缓存：同一公告的诊断结果只在本次会话内保留，不写入磁盘
+const feasibilityCache = new Map<string, FeasibilityAssessment>()
 
 function setListeningEnabled(enabled: boolean): VoiceStatus {
   voiceSidecar.command(enabled ? 'resume' : 'pause')
@@ -96,8 +99,23 @@ function registerIpc(): void {
     const snapshot = await listNotices()
     const notice = snapshot.notices.find((item) => item.id === noticeId)
     if (!notice) throw new Error('本地公告快照中不存在该项目，请先刷新公告。')
-    if (notice.source !== 'ningxia') throw new Error('该公告来源的详情解析尚未接入；请通过官网核验。')
-    return fetchNingxiaDetail(notice.id, notice.url)
+    // 详情服务按来源解析，并在网络失败时回退到本机缓存或显式 missing 结构。
+    return getNoticeDetail(noticeId, snapshot)
+  })
+  ipcMain.handle(IPC_CHANNELS.feasibilityRun, async (_event, noticeId: string) => {
+    if (typeof noticeId !== 'string' || !noticeId.trim()) throw new Error('公告编号无效。')
+    const snapshot = await listNotices()
+    const notice = snapshot.notices.find((item) => item.id === noticeId)
+    if (!notice) throw new Error('本地公告快照中不存在该项目，请先刷新公告。')
+    // 网络不可用时详情服务回退为缓存或显式 missing，规则引擎据此给出“进一步核实”。
+    const detail = await getNoticeDetail(noticeId, snapshot)
+    const assessment = await runFeasibilityAssessment(notice, detail)
+    feasibilityCache.set(notice.id, assessment)
+    return assessment
+  })
+  ipcMain.handle(IPC_CHANNELS.feasibilityGet, (_event, noticeId: string) => {
+    if (typeof noticeId !== 'string' || !noticeId.trim()) throw new Error('公告编号无效。')
+    return feasibilityCache.get(noticeId) ?? null
   })
   ipcMain.handle(IPC_CHANNELS.tenderFileStatus, (_event, noticeId: string) => {
     if (typeof noticeId !== 'string' || !noticeId.trim()) throw new Error('公告编号无效。')

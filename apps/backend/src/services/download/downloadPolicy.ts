@@ -61,13 +61,16 @@ export function isSupportedTenderFile(contentType: string, filename: string): Do
   }
   const allowedTypes = new Set([
     'application/pdf', 'application/zip', 'application/x-zip-compressed',
-    'application/octet-stream', 'application/msword',
+    'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   ])
   const allowedExtensions = new Set(['pdf', 'zip', 'rar', 'doc', 'docx', 'xls', 'xlsx', '7z'])
-  if (allowedTypes.has(normalizedType) || allowedExtensions.has(extension)) {
+  if (extension && !allowedExtensions.has(extension)) {
+    return { allowed: false, reason: '文件扩展名不属于允许下载的招标材料类型。' }
+  }
+  if (allowedTypes.has(normalizedType) || (normalizedType === 'application/octet-stream' && allowedExtensions.has(extension))) {
     return { allowed: true, reason: '文件类型符合受控下载策略。' }
   }
   return { allowed: false, reason: '文件类型无法确认，需要在官网人工核验。' }

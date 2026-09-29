@@ -26,7 +26,9 @@ describe('政府采购文件下载策略', () => {
     expect(sanitizeTenderFilename('../../报价:材料.pdf')).toBe('报价_材料.pdf')
     expect(sanitizeTenderFilename('')).toBe('招标文件')
     expect(isSupportedTenderFile('application/pdf', 'tender.pdf').allowed).toBe(true)
+    expect(isSupportedTenderFile('application/octet-stream', 'tender.zip').allowed).toBe(true)
     expect(isSupportedTenderFile('application/octet-stream', 'payload.exe').allowed).toBe(false)
+    expect(isSupportedTenderFile('application/octet-stream', 'login.html').allowed).toBe(false)
     expect(isSupportedTenderFile('text/html', 'login.html').allowed).toBe(false)
   })
 

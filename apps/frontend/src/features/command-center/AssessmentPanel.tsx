@@ -38,7 +38,7 @@ export function AssessmentPanel({ assessment, loading, error, onRetry, onClose }
           <h3>正在运行可投性诊断</h3>
         </header>
         <div className="assessment-panel__loading">
-          <Hourglass20Regular /> 读取硬门槛、风险与建议中（联调模式走本地快照）
+          <Hourglass20Regular /> 读取硬门槛、风险与建议中
         </div>
       </aside>
     )
@@ -86,7 +86,7 @@ export function AssessmentPanel({ assessment, loading, error, onRetry, onClose }
           <h3>
             <Flag20Regular /> {CONCLUSION_LABEL[assessment.conclusion]}
           </h3>
-          <p>置信度 {Math.round(assessment.confidence * 100)}% · 评估时间 {formatTime(assessment.assessedAt)}</p>
+          <p>证据覆盖率 {Math.round(assessment.confidence * 100)}% · 评估时间 {formatTime(assessment.assessedAt)}</p>
         </div>
         <button className="icon-action" onClick={onClose} type="button" title="关闭诊断">
           <Dismiss20Regular />
@@ -140,7 +140,7 @@ export function AssessmentPanel({ assessment, loading, error, onRetry, onClose }
           </ol>
         )}
         <p className="assessment-panel__note">
-          系统分析与公告事实分栏呈现；最终是否参与由 sir 决定，不会自动写入外部系统。
+          覆盖率表示已明确的硬门槛证据占比，不代表中标概率；内部能力线索须核验原件。最终是否参与由 sir 决定。
         </p>
       </section>
     </aside>
@@ -149,12 +149,13 @@ export function AssessmentPanel({ assessment, loading, error, onRetry, onClose }
 
 function GateRow({ gate }: { gate: HardGate }): JSX.Element {
   const passed = gate.result === 'pass'
+  const failed = gate.result === 'fail'
   return (
     <li className={`gate-row gate-row--${gate.result}`}>
-      {passed ? <CheckmarkCircle20Regular /> : <ErrorCircle20Regular />}
+      {passed ? <CheckmarkCircle20Regular /> : failed ? <ErrorCircle20Regular /> : <Hourglass20Regular />}
       <div>
         <strong>{gate.name}</strong>
-        <span>{passed ? '通过' : '未通过'}</span>
+        <span>{passed ? '通过' : failed ? '未通过' : '待核实'}</span>
         <p>{gate.reason}</p>
       </div>
     </li>
