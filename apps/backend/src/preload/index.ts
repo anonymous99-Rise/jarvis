@@ -56,6 +56,8 @@ const api = {
     ipcRenderer.invoke(IPC_CHANNELS.feasibilityGet, noticeId),
   getTenderFileStatus: (noticeId: string): Promise<TenderFileStatus> =>
     ipcRenderer.invoke(IPC_CHANNELS.tenderFileStatus, noticeId),
+  downloadTenderFile: (noticeId: string): Promise<TenderFileStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.tenderFileDownload, noticeId),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
   wakeAssistant: (source: WakeSource = 'button'): Promise<{ triggered: boolean; status: VoiceStatus }> =>
     ipcRenderer.invoke(IPC_CHANNELS.voiceWake, source),

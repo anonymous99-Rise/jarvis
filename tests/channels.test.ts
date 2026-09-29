@@ -30,6 +30,7 @@ describe('IPC allowlist', () => {
       'providersSave',
       'providersTest',
       'showWindow',
+      'tenderFileDownload',
       'tenderFileStatus',
       'voiceSetListening',
       'voiceStatus',

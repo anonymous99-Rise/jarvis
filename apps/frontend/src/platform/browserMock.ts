@@ -5,6 +5,7 @@ import type {
   ProcurementNotice,
   ProviderSummary,
   SourcedFact,
+  TenderFileStatus,
   VoiceStatus
 } from '@jarvis/contracts'
 
@@ -61,6 +62,7 @@ export function createBrowserMock(): JarvisDesktopApi {
 
   const memories: MemoryItem[] = []
   const approvals: ApprovalRequest[] = []
+  const tenderFileStatuses = new Map<string, TenderFileStatus>()
   const wakeListeners = new Set<() => void>()
   const voiceListeners = new Set<(status: VoiceStatus) => void>()
   const providers: ProviderSummary[] = [{
@@ -251,12 +253,24 @@ export function createBrowserMock(): JarvisDesktopApi {
       }
     },
     getFeasibility: async () => null,
-    getTenderFileStatus: async (noticeId) => ({
+    getTenderFileStatus: async (noticeId) => tenderFileStatuses.get(noticeId) ?? ({
       noticeId,
       state: 'not-downloaded',
       message: '前端联调模式：未接入真实招标文件下载。',
       updatedAt: now()
     }),
+    downloadTenderFile: async (noticeId) => {
+      const notice = sampleNotices.find((item) => item.id === noticeId)
+      const status: TenderFileStatus = {
+        noticeId,
+        state: 'human_action_required',
+        sourceUrl: notice?.url,
+        message: '前端联调模式不会访问真实官网或保存文件，请在官网人工核验。',
+        updatedAt: now()
+      }
+      tenderFileStatuses.set(noticeId, status)
+      return status
+    },
     openExternal: async () => undefined,
     wakeAssistant: async () => {
       voiceStatus = { ...voiceStatus, phase: 'speaking', lastWakeAt: now() }

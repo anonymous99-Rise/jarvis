@@ -20,6 +20,7 @@ export const IPC_CHANNELS = {
   feasibilityRun: 'feasibility:run',
   feasibilityGet: 'feasibility:get',
   tenderFileStatus: 'tender-file:status',
+  tenderFileDownload: 'tender-file:download',
   openExternal: 'app:open-external',
   voiceWake: 'voice:wake',
   voiceStatus: 'voice:status',
@@ -176,7 +177,7 @@ export type HardGateName =
   | '截止时间'
   | '预算结构'
 
-export type HardGateResult = 'pass' | 'fail'
+export type HardGateResult = 'pass' | 'fail' | 'unknown'
 
 export type HardGate = {
   name: HardGateName
@@ -195,12 +196,19 @@ export type FeasibilityAssessment = {
   assessedAt: string
 }
 
-export type TenderFileState = 'not-downloaded' | 'downloading' | 'downloaded' | 'submitted'
+export type TenderFileState =
+  | 'not-downloaded'
+  | 'downloading'
+  | 'downloaded'
+  | 'submitted'
+  | 'human_action_required'
+  | 'blocked'
 
 export type TenderFileStatus = {
   noticeId: string
   state: TenderFileState
   filePath?: string
+  sourceUrl?: string
   message?: string
   updatedAt: string
 }
@@ -289,6 +297,7 @@ export interface JarvisDesktopApi {
   runFeasibility(noticeId: string): Promise<FeasibilityAssessment>
   getFeasibility(noticeId: string): Promise<FeasibilityAssessment | null>
   getTenderFileStatus(noticeId: string): Promise<TenderFileStatus>
+  downloadTenderFile(noticeId: string): Promise<TenderFileStatus>
   openExternal(url: string): Promise<void>
   wakeAssistant(source?: WakeSource): Promise<{ triggered: boolean; status: VoiceStatus }>
   getVoiceStatus(): Promise<VoiceStatus>

@@ -1,5 +1,6 @@
 import { app, dialog, globalShortcut, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { IPC_CHANNELS, type AssistantState, type VoiceStatus, type WakeSource } from '@jarvis/contracts'
 import type { ApprovalInput, ChatInput, MemoryInput, ProposalInput, ProviderInput } from '@jarvis/contracts'
 import { getKnowledgeStatus, rebuildKnowledgeIndex, searchKnowledge } from '../services/knowledge/knowledgeService'
@@ -7,6 +8,8 @@ import { listMemories, saveMemory } from '../services/memory/memoryRepository'
 import { activateProvider, listProviders, saveProvider, testProvider } from '../services/models/providerRepository'
 import { chatWithActiveProvider } from '../services/models/modelGateway'
 import { listNotices, refreshNotices } from '../services/crawler/crawlerService'
+import { fetchNingxiaDetail } from '../services/crawler/ningxiaDetail'
+import { createDownloadManager, type DownloadManager } from '../services/download/downloadManager'
 import { createTray } from './tray'
 import { updateTrayListening } from './tray'
 import { createMainWindow, getMainWindow, setQuitting, showMainWindow } from './window'
@@ -31,6 +34,7 @@ const voiceController = new VoiceController(undefined, (status: VoiceStatus) => 
 })
 const voiceSidecar = new VoiceSidecarManager()
 const approvalService = new ApprovalService()
+let tenderDownloads: DownloadManager
 
 function setListeningEnabled(enabled: boolean): VoiceStatus {
   voiceSidecar.command(enabled ? 'resume' : 'pause')
@@ -57,6 +61,9 @@ async function wakeAssistant(source: WakeSource): Promise<{ triggered: boolean; 
 }
 
 function registerIpc(): void {
+  tenderDownloads = createDownloadManager({
+    directory: path.join(app.getPath('userData'), 'private', 'tender-files')
+  })
   ipcMain.handle(IPC_CHANNELS.appInfo, () => ({
     platform: process.platform,
     arch: process.arch,
@@ -84,6 +91,34 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.memoriesSave, (_event, input: MemoryInput) => saveMemory(input))
   ipcMain.handle(IPC_CHANNELS.noticesList, () => listNotices())
   ipcMain.handle(IPC_CHANNELS.noticesRefresh, () => refreshNotices())
+  ipcMain.handle(IPC_CHANNELS.noticesDetail, async (_event, noticeId: string) => {
+    if (typeof noticeId !== 'string' || !noticeId.trim()) throw new Error('公告编号无效。')
+    const snapshot = await listNotices()
+    const notice = snapshot.notices.find((item) => item.id === noticeId)
+    if (!notice) throw new Error('本地公告快照中不存在该项目，请先刷新公告。')
+    if (notice.source !== 'ningxia') throw new Error('该公告来源的详情解析尚未接入；请通过官网核验。')
+    return fetchNingxiaDetail(notice.id, notice.url)
+  })
+  ipcMain.handle(IPC_CHANNELS.tenderFileStatus, (_event, noticeId: string) => {
+    if (typeof noticeId !== 'string' || !noticeId.trim()) throw new Error('公告编号无效。')
+    return tenderDownloads.getStatus(noticeId)
+  })
+  ipcMain.handle(IPC_CHANNELS.tenderFileDownload, async (_event, noticeId: string) => {
+    if (typeof noticeId !== 'string' || !noticeId.trim()) throw new Error('公告编号无效。')
+    const snapshot = await listNotices()
+    const notice = snapshot.notices.find((item) => item.id === noticeId)
+    if (!notice) throw new Error('本地公告快照中不存在该项目，请先刷新公告。')
+    if (notice.source !== 'ningxia') {
+      return {
+        noticeId,
+        state: 'blocked' as const,
+        sourceUrl: notice.url,
+        message: '当前受控下载仅适用于宁夏政府采购网公告。',
+        updatedAt: new Date().toISOString()
+      }
+    }
+    return tenderDownloads.download(notice)
+  })
   ipcMain.handle(IPC_CHANNELS.openExternal, async (_event, url: string) => {
     const parsed = new URL(url)
     const allowedHosts = new Set(['www.ccgp.gov.cn', 'ccgp.gov.cn', 'www.ccgp-ningxia.gov.cn', 'ccgp-ningxia.gov.cn'])

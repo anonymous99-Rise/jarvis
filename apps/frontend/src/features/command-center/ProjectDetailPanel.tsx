@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   ArrowUpRight20Regular,
   Dismiss20Regular,
@@ -6,7 +7,7 @@ import {
   ShieldQuestion20Regular
 } from '@fluentui/react-icons'
 import type { JSX } from 'react'
-import type { NoticeDetail, NoticeSnapshot, SourcedFact } from '@jarvis/contracts'
+import type { NoticeDetail, NoticeSnapshot, SourcedFact, TenderFileStatus } from '@jarvis/contracts'
 
 type Field = {
   key: keyof Omit<NoticeDetail, 'noticeId'>
@@ -49,6 +50,45 @@ export function ProjectDetailPanel({
   onRetry,
   onClose
 }: Props): JSX.Element {
+  const [fileStatus, setFileStatus] = useState<TenderFileStatus | null>(null)
+  const [fileBusy, setFileBusy] = useState(false)
+
+  useEffect(() => {
+    let current = true
+    setFileStatus(null)
+    if (noticeId) {
+      window.jarvis.getTenderFileStatus(noticeId)
+        .then((status) => { if (current) setFileStatus(status) })
+        .catch((error: unknown) => {
+          if (!current) return
+          setFileStatus({
+            noticeId,
+            state: 'blocked',
+            message: error instanceof Error ? error.message : '读取招标文件状态失败。',
+            updatedAt: new Date().toISOString()
+          })
+        })
+    }
+    return () => { current = false }
+  }, [noticeId])
+
+  const startTenderDownload = async (): Promise<void> => {
+    if (!noticeId) return
+    setFileBusy(true)
+    try {
+      setFileStatus(await window.jarvis.downloadTenderFile(noticeId))
+    } catch (error) {
+      setFileStatus({
+        noticeId,
+        state: 'blocked',
+        message: error instanceof Error ? error.message : '招标文件下载失败。',
+        updatedAt: new Date().toISOString()
+      })
+    } finally {
+      setFileBusy(false)
+    }
+  }
+
   if (!noticeId) {
     return (
       <aside className="detail-panel detail-panel--idle" aria-label="项目详情">
@@ -85,6 +125,15 @@ export function ProjectDetailPanel({
           <strong>详情读取失败</strong>
           <span>{error}</span>
           <button className="secondary-action" onClick={onRetry} type="button">重试</button>
+          {notice && (
+            <button
+              className="secondary-action"
+              onClick={() => void window.jarvis.openExternal(notice.url)}
+              type="button"
+            >
+              打开官网人工查看 <ArrowUpRight20Regular />
+            </button>
+          )}
         </div>
       ) : loading || !detail ? (
         <div className="detail-panel__loading">
@@ -144,6 +193,48 @@ export function ProjectDetailPanel({
               详情区只包含公告原文事实；系统分析与行动建议将在右侧诊断面板单独展示。
             </span>
           </div>
+
+          {notice && (
+            <section className="tender-file-panel" aria-label="招标文件">
+              <h4>招标文件</h4>
+              {notice.source === 'ningxia' ? (
+                <>
+                  <p className={`tender-file-panel__status tender-file-panel__status--${fileStatus?.state ?? 'loading'}`}>
+                    {fileStatus?.message ?? '正在读取文件状态。'}
+                  </p>
+                  {fileStatus?.state === 'downloaded' ? (
+                    <p className="tender-file-panel__path">已保存到本机：{fileStatus.filePath}</p>
+                  ) : fileStatus?.state === 'downloading' || fileBusy ? (
+                    <button className="secondary-action" disabled type="button">正在检查并下载</button>
+                  ) : fileStatus?.state === 'human_action_required' ? (
+                    <button
+                      className="secondary-action"
+                      onClick={() => void window.jarvis.openExternal(fileStatus.sourceUrl || notice.url)}
+                      type="button"
+                    >
+                      打开官网人工处理 <ArrowUpRight20Regular />
+                    </button>
+                  ) : fileStatus?.state === 'blocked' ? (
+                    <button
+                      className="secondary-action"
+                      onClick={() => void window.jarvis.openExternal(notice.url)}
+                      type="button"
+                    >
+                      在官网核验 <ArrowUpRight20Regular />
+                    </button>
+                  ) : (
+                    <button className="secondary-action" onClick={() => void startTenderDownload()} type="button">
+                      受控下载招标文件 <ArrowUpRight20Regular />
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p className="tender-file-panel__status">
+                  当前受控下载流程适用于宁夏政府采购网；请打开公告官网查找文件。
+                </p>
+              )}
+            </section>
+          )}
         </>
       )}
     </aside>
