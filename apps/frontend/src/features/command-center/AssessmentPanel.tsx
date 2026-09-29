@@ -18,6 +18,8 @@ import type {
 type Props = {
   assessment: FeasibilityAssessment | null
   loading: boolean
+  error: string | null
+  onRetry: () => void
   onClose: () => void
 }
 
@@ -27,7 +29,7 @@ const CONCLUSION_LABEL: Record<FeasibilityConclusion, string> = {
   不建议参与: '不建议参与'
 }
 
-export function AssessmentPanel({ assessment, loading, onClose }: Props): JSX.Element {
+export function AssessmentPanel({ assessment, loading, error, onRetry, onClose }: Props): JSX.Element {
   if (loading) {
     return (
       <aside className="assessment-panel assessment-panel--loading" aria-label="可投性诊断">
@@ -38,6 +40,24 @@ export function AssessmentPanel({ assessment, loading, onClose }: Props): JSX.El
         <div className="assessment-panel__loading">
           <Hourglass20Regular /> 读取硬门槛、风险与建议中（联调模式走本地快照）
         </div>
+      </aside>
+    )
+  }
+
+  if (error) {
+    return (
+      <aside className="assessment-panel assessment-panel--error" aria-label="可投性诊断">
+        <header className="assessment-panel__header">
+          <div>
+            <span className="section-heading__label">系统分析 · 规则引擎</span>
+            <h3>诊断未能完成</h3>
+          </div>
+          <button className="icon-action" onClick={onClose} type="button" title="关闭诊断">
+            <Dismiss20Regular />
+          </button>
+        </header>
+        <p className="assessment-panel__error" role="alert">{error}</p>
+        <button className="secondary-action" onClick={onRetry} type="button">重新运行诊断</button>
       </aside>
     )
   }

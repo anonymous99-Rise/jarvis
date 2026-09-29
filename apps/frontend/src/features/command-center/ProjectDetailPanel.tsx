@@ -30,9 +30,11 @@ type Props = {
   noticeId: string | null
   detail: NoticeDetail | null
   loading: boolean
+  error: string | null
   snapshot: NoticeSnapshot
   assessing: boolean
   onRunAssessment: () => void
+  onRetry: () => void
   onClose: () => void
 }
 
@@ -40,9 +42,11 @@ export function ProjectDetailPanel({
   noticeId,
   detail,
   loading,
+  error,
   snapshot,
   assessing,
   onRunAssessment,
+  onRetry,
   onClose
 }: Props): JSX.Element {
   if (!noticeId) {
@@ -76,7 +80,13 @@ export function ProjectDetailPanel({
         </button>
       </header>
 
-      {loading || !detail ? (
+      {error ? (
+        <div className="detail-panel__error" role="alert">
+          <strong>详情读取失败</strong>
+          <span>{error}</span>
+          <button className="secondary-action" onClick={onRetry} type="button">重试</button>
+        </div>
+      ) : loading || !detail ? (
         <div className="detail-panel__loading">
           <Hourglass20Regular /> 正在读取公告详情（联调模式走本地快照）
         </div>
@@ -141,7 +151,7 @@ export function ProjectDetailPanel({
 }
 
 function buildFields(noticeId: string, detail: NoticeDetail): Field[] {
-  void noticeId
+  if (detail.noticeId !== noticeId) return []
   return [
     { key: 'projectCode', label: '项目编号', fact: detail.projectCode },
     { key: 'buyer', label: '采购人', fact: detail.buyer },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import {
   ArrowClockwise20Regular,
   ArrowUpRight20Regular,
@@ -27,9 +27,13 @@ export function ProjectCommandCenter(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<NoticeDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
 
   const [assessment, setAssessment] = useState<FeasibilityAssessment | null>(null)
   const [assessmentLoading, setAssessmentLoading] = useState(false)
+  const [assessmentError, setAssessmentError] = useState<string | null>(null)
+  const detailRequest = useRef(0)
+  const assessmentRequest = useRef(0)
 
   useEffect(() => {
     window.jarvis.listNotices()
@@ -74,42 +78,67 @@ export function ProjectCommandCenter(): JSX.Element {
   }
 
   const openDetail = async (notice: ProcurementNotice): Promise<void> => {
+    const requestId = ++detailRequest.current
+    assessmentRequest.current += 1
     setSelectedId(notice.id)
     setDetail(null)
+    setDetailError(null)
     setAssessment(null)
+    setAssessmentError(null)
+    setAssessmentLoading(false)
     setDetailLoading(true)
     try {
       const result = await window.jarvis.getNoticeDetail(notice.id)
+      if (requestId !== detailRequest.current) return
       setDetail(result)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '读取详情失败')
-      setSelectedId(null)
+      if (requestId !== detailRequest.current) return
+      const errorMessage = error instanceof Error ? error.message : '读取详情失败'
+      setDetailError(errorMessage)
     } finally {
-      setDetailLoading(false)
+      if (requestId === detailRequest.current) setDetailLoading(false)
     }
   }
 
   const closeDetail = (): void => {
+    detailRequest.current += 1
+    assessmentRequest.current += 1
     setSelectedId(null)
     setDetail(null)
+    setDetailError(null)
     setAssessment(null)
+    setAssessmentError(null)
+    setDetailLoading(false)
+    setAssessmentLoading(false)
   }
 
   const runAssessment = async (): Promise<void> => {
     if (!selectedId) return
+    const requestId = ++assessmentRequest.current
+    const noticeId = selectedId
     setAssessmentLoading(true)
     setAssessment(null)
+    setAssessmentError(null)
     try {
-      const result = await window.jarvis.runFeasibility(selectedId)
+      const result = await window.jarvis.runFeasibility(noticeId)
+      if (requestId !== assessmentRequest.current) return
       setAssessment(result)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '可投性诊断失败')
+      if (requestId !== assessmentRequest.current) return
+      setAssessmentError(error instanceof Error ? error.message : '可投性诊断失败')
     } finally {
-      setAssessmentLoading(false)
+      if (requestId === assessmentRequest.current) setAssessmentLoading(false)
     }
   }
 
-  const closeAssessment = (): void => setAssessment(null)
+  const closeAssessment = (): void => {
+    assessmentRequest.current += 1
+    setAssessment(null)
+    setAssessmentError(null)
+    setAssessmentLoading(false)
+  }
+
+  const displayedNotices = visible.slice(0, 40)
 
   const refreshedAt = snapshot.refreshedAt
     ? new Date(snapshot.refreshedAt).toLocaleString('zh-CN', { hour12: false })
@@ -150,7 +179,7 @@ export function ProjectCommandCenter(): JSX.Element {
               <input checked={relevantOnly} onChange={(event) => setRelevantOnly(event.target.checked)} type="checkbox" />
               仅看信息化机会
             </label>
-            <span className="project-toolbar__count">显示 {visible.length} / {snapshot.notices.length} 条</span>
+            <span className="project-toolbar__count">显示 {displayedNotices.length} / {snapshot.notices.length} 条</span>
           </div>
 
           <div className="project-message"><DatabaseSearch20Regular /> {message}</div>
@@ -163,17 +192,25 @@ export function ProjectCommandCenter(): JSX.Element {
             </div>
           ) : (
             <div className="notice-list">
-              {visible.slice(0, 40).map((notice) => {
+              {displayedNotices.map((notice) => {
                 const active = notice.id === selectedId
                 return (
                   <article
                     className={active ? 'notice-card notice-card--active' : 'notice-card'}
                     key={`${notice.source}:${notice.id}`}
                   >
-                    <button
+                    <div
                       className="notice-card__main"
                       onClick={() => void openDetail(notice)}
-                      type="button"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          void openDetail(notice)
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`查看项目详情：${notice.title}`}
                     >
                       <div className="notice-card__badges">
                         <span>{notice.sourceName}</span>
@@ -187,7 +224,7 @@ export function ProjectCommandCenter(): JSX.Element {
                           {notice.matchedKeywords.slice(0, 5).map((keyword) => <span key={keyword}>{keyword}</span>)}
                         </div>
                       )}
-                    </button>
+                    </div>
                     <div className="notice-card__facts">
                       <span><CalendarClock20Regular /> 发布于 {notice.publishedAt}</span>
                       <span>预算：{notice.budget}</span>
@@ -220,15 +257,22 @@ export function ProjectCommandCenter(): JSX.Element {
           noticeId={selectedId}
           detail={detail}
           loading={detailLoading}
+          error={detailError}
           snapshot={snapshot}
           assessing={assessmentLoading}
           onRunAssessment={runAssessment}
+          onRetry={() => {
+            const notice = snapshot.notices.find((item) => item.id === selectedId)
+            if (notice) void openDetail(notice)
+          }}
           onClose={closeDetail}
         />
 
         <AssessmentPanel
           assessment={assessment}
           loading={assessmentLoading}
+          error={assessmentError}
+          onRetry={() => void runAssessment()}
           onClose={closeAssessment}
         />
       </div>
