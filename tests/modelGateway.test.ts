@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { JARVIS_PERSONA, requestChatCompletion } from '../apps/backend/src/services/models/modelGateway'
 import type { ActiveProviderCredentials } from '../apps/backend/src/services/models/providerRepository'
 
+// 模型请求测试不依赖本机 Electron 运行环境。
+vi.mock('electron', () => ({ app: {}, safeStorage: {} }))
+
 const provider: ActiveProviderCredentials = {
   id: 'provider-a',
   name: '供应商A',
