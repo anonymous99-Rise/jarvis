@@ -85,12 +85,14 @@ export function formatLocal(isoTime: string): string {
 
 // 生成 osascript 新增日程脚本;仅构造文本便于测试,真正执行在 calendarService 中
 export function buildWriteScript(draft: CalendarDraft): string {
-  const escape = (value: string): string => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  // 换行会破坏 JXA 字符串字面量，一并压平
+  const escape = (value: string): string =>
+    value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, ' ')
   return [
     `const calendarName = "${escape(draft.calendarName)}"`,
     `const summary = "${escape(draft.title)}"`,
-    `const startAt = new Date("${draft.remindAt}")`,
-    `const endAt = new Date("${draft.remindEndAt}")`,
+    `const startAt = new Date("${escape(draft.remindAt)}")`,
+    `const endAt = new Date("${escape(draft.remindEndAt)}")`,
     'const calendarApp = Application("Calendar")',
     'const calendars = calendarApp.calendars.whose({name: calendarName})()',
     'if (calendars.length === 0) throw new Error("未找到目标日历：" + calendarName)',

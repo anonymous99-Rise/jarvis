@@ -24,7 +24,6 @@ describe('日历草稿生成', () => {
   it('默认从项目截止时间提前 48 小时生成提醒', () => {
     const draft = buildCalendarDraft(notice)
     expect(draft.reminderLeadHours).toBe(DEFAULT_REMINDER_LEAD_HOURS)
-    expect(draft.reminderLeadHours).toBe(48)
     expect(Date.parse(draft.deadlineAt)).toBe(localTime(2026, 10, 30, 9))
     expect(Date.parse(draft.remindAt)).toBe(localTime(2026, 10, 28, 9))
     expect(Date.parse(draft.remindEndAt)).toBe(localTime(2026, 10, 28, 10))
@@ -114,6 +113,40 @@ describe('calendar-write 一次性令牌', () => {
     await expect(writeConfirmedEvent(approvals, request.id, draft)).rejects.toThrow('macOS')
     expect(approvals.getApproved(request.id, 'calendar-write').status).toBe('approved')
   })
+
+  it('提醒时间字段非法时拒绝写入且不消费令牌', async () => {
+    const approvals = new ApprovalService(() => Date.parse('2026-09-29T09:00:00.000Z'))
+    const request = approvals.request({
+      action: 'calendar-write',
+      title: draft.title,
+      summary: '确认写入',
+      target: '日历「JARVIS」'
+    })
+    approvals.decide(request.id, true)
+    const broken = { ...draft, remindAt: 'not-a-date' }
+    await expect(writeConfirmedEvent(approvals, request.id, broken)).rejects.toThrow('提醒时间非法')
+    expect(approvals.getApproved(request.id, 'calendar-write').status).toBe('approved')
+  })
+
+  it('同一令牌写入进行中时拒绝重复提交，结束后恢复正常流转', async () => {
+    const approvals = new ApprovalService(() => Date.parse('2026-09-29T09:00:00.000Z'))
+    const request = approvals.request({
+      action: 'calendar-write',
+      title: draft.title,
+      summary: '确认写入',
+      target: '日历「JARVIS」'
+    })
+    approvals.decide(request.id, true)
+    // 用非法日期草稿触发校验失败，保证任何平台都不会执行真实 osascript；
+    // 第一次调用同步注册 in-flight 后在校验处失败，并发第二次必须立即被拦截
+    const broken = { ...draft, remindAt: 'not-a-date' }
+    const first = writeConfirmedEvent(approvals, request.id, broken)
+    await expect(writeConfirmedEvent(approvals, request.id, broken)).rejects.toThrow('重复提交')
+    await expect(first).rejects.toThrow('提醒时间非法')
+    // in-flight 已清除，后续调用按业务校验正常处理，令牌未被消费
+    await expect(writeConfirmedEvent(approvals, request.id, broken)).rejects.toThrow('提醒时间非法')
+    expect(approvals.getApproved(request.id, 'calendar-write').status).toBe('approved')
+  })
 })
 
 describe('写入脚本构造', () => {
@@ -127,5 +160,12 @@ describe('写入脚本构造', () => {
     expect(script).toContain('\\\\一期')
     expect(script).toContain('Application("Calendar")')
     expect(script).toContain('未找到目标日历')
+  })
+
+  it('标题中的换行被压平，不破坏 JXA 字符串字面量结构', () => {
+    const draft = buildCalendarDraft({ ...notice, title: '一期\n二期公告' })
+    const script = buildWriteScript(draft)
+    expect(script).toContain('一期 二期公告')
+    expect(script.split('\n')).toHaveLength(10)
   })
 })

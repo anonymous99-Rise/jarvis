@@ -46,15 +46,20 @@ export type CalendarWriteResult = {
   startAt: string
 }
 
-// 未获得 calendar-write 确认令牌前不触碰系统日历；写入成功后才消费令牌，保证只能写入一次
-export async function writeConfirmedEvent(
+// 同一确认令牌的写入串行化：osascript 执行期间拒绝重复提交，防止双击写入重复日程
+const pendingWrites = new Map<string, Promise<CalendarWriteResult>>()
+
+async function performWrite(
   approvalService: ApprovalService,
   approvalId: string,
   draft: CalendarDraft
 ): Promise<CalendarWriteResult> {
   approvalService.getApproved(approvalId, 'calendar-write')
-  if (process.platform !== 'darwin') throw new Error('当前演示版仅支持写入 macOS 系统日历')
   if (draft.action !== 'calendar-write') throw new Error('草稿动作与审批范围不一致')
+  if (!Number.isFinite(Date.parse(draft.remindAt)) || !Number.isFinite(Date.parse(draft.remindEndAt))) {
+    throw new Error('草稿提醒时间非法，已拒绝写入')
+  }
+  if (process.platform !== 'darwin') throw new Error('当前演示版仅支持写入 macOS 系统日历')
 
   const { stdout } = await execFileAsync(
     '/usr/bin/osascript',
@@ -67,4 +72,20 @@ export async function writeConfirmedEvent(
   }
   approvalService.consume(approvalId, 'calendar-write')
   return result as CalendarWriteResult
+}
+
+// 未获得 calendar-write 确认令牌前不触碰系统日历；写入成功后才消费令牌，保证只能写入一次
+export function writeConfirmedEvent(
+  approvalService: ApprovalService,
+  approvalId: string,
+  draft: CalendarDraft
+): Promise<CalendarWriteResult> {
+  if (pendingWrites.has(approvalId)) {
+    return Promise.reject(new Error('同一确认令牌的写入正在进行中，请勿重复提交'))
+  }
+  const execution = performWrite(approvalService, approvalId, draft).finally(() => {
+    pendingWrites.delete(approvalId)
+  })
+  pendingWrites.set(approvalId, execution)
+  return execution
 }
