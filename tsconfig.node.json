@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "electron-vite/node"]
+  },
+  "include": ["electron.vite.config.ts", "vitest.config.ts", "apps/backend/src/**/*.ts", "packages/contracts/src/**/*.ts"]
+}

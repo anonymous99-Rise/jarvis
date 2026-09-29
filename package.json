@@ -1,0 +1,58 @@
+{
+  "name": "jarvis-personal-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JARVIS personal assistant desktop demo",
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:desktop": "electron-vite dev",
+    "dev:frontend": "vite --config apps/frontend/vite.config.ts",
+    "build": "npm run typecheck && electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/backend/tsconfig.json && tsc --noEmit -p apps/frontend/tsconfig.json && tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:frontend": "vitest run tests/assistantMachine.test.ts",
+    "test:backend": "vitest run --exclude tests/assistantMachine.test.ts",
+    "test:watch": "vitest",
+    "pack:mac:x64": "npm run build && electron-builder --mac --x64 --dir"
+  },
+  "dependencies": {
+    "@fluentui/react-components": "latest",
+    "@fluentui/react-icons": "latest",
+    "docx": "^9.8.1",
+    "react": "latest",
+    "react-dom": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "5.0.4",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "electron-vite": "5.0.0",
+    "typescript": "latest",
+    "vite": "7.3.6",
+    "vitest": "latest"
+  },
+  "build": {
+    "appId": "cn.hope.jarvis",
+    "productName": "JARVIS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dir"
+      ]
+    }
+  }
+}
