@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { CalendarEvent } from '@jarvis/contracts'
+import type { ApprovalService } from '../approvals/approvalService'
+import { buildWriteScript, type CalendarDraft } from './calendarPolicy'
 
 const execFileAsync = promisify(execFile)
 
@@ -35,4 +37,55 @@ export async function readUpcomingCalendarEvents(): Promise<CalendarEvent[]> {
   const parsed: unknown = JSON.parse(stdout.trim() || '[]')
   if (!Array.isArray(parsed)) throw new Error('系统日历返回格式异常')
   return parsed as CalendarEvent[]
+}
+
+export type CalendarWriteResult = {
+  eventId: string
+  calendar: string
+  title: string
+  startAt: string
+}
+
+// 同一确认令牌的写入串行化：osascript 执行期间拒绝重复提交，防止双击写入重复日程
+const pendingWrites = new Map<string, Promise<CalendarWriteResult>>()
+
+async function performWrite(
+  approvalService: ApprovalService,
+  approvalId: string,
+  draft: CalendarDraft
+): Promise<CalendarWriteResult> {
+  approvalService.getApproved(approvalId, 'calendar-write')
+  if (draft.action !== 'calendar-write') throw new Error('草稿动作与审批范围不一致')
+  if (!Number.isFinite(Date.parse(draft.remindAt)) || !Number.isFinite(Date.parse(draft.remindEndAt))) {
+    throw new Error('草稿提醒时间非法，已拒绝写入')
+  }
+  if (process.platform !== 'darwin') throw new Error('当前演示版仅支持写入 macOS 系统日历')
+
+  const { stdout } = await execFileAsync(
+    '/usr/bin/osascript',
+    ['-l', 'JavaScript', '-e', buildWriteScript(draft)],
+    { timeout: 20_000, maxBuffer: 1024 * 1024 }
+  )
+  const result: unknown = JSON.parse(stdout.trim())
+  if (!result || typeof result !== 'object' || !('eventId' in result)) {
+    throw new Error('日历写入返回格式异常')
+  }
+  approvalService.consume(approvalId, 'calendar-write')
+  return result as CalendarWriteResult
+}
+
+// 未获得 calendar-write 确认令牌前不触碰系统日历；写入成功后才消费令牌，保证只能写入一次
+export function writeConfirmedEvent(
+  approvalService: ApprovalService,
+  approvalId: string,
+  draft: CalendarDraft
+): Promise<CalendarWriteResult> {
+  if (pendingWrites.has(approvalId)) {
+    return Promise.reject(new Error('同一确认令牌的写入正在进行中，请勿重复提交'))
+  }
+  const execution = performWrite(approvalService, approvalId, draft).finally(() => {
+    pendingWrites.delete(approvalId)
+  })
+  pendingWrites.set(approvalId, execution)
+  return execution
 }

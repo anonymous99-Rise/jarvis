@@ -42,6 +42,17 @@ export class ApprovalService {
     return { ...request }
   }
 
+  // 写入前校验：令牌必须已获明确批准且动作匹配，但不消费；consume 仍在动作成功后调用，
+  // 保证外部动作失败时令牌保留、可重试，而成功后只能消费一次。
+  getApproved(id: string, expectedAction: ApprovalAction): ApprovalRequest {
+    this.expireOldRequests()
+    const request = this.requests.get(id)
+    if (!request) throw new Error('审批请求不存在')
+    if (request.action !== expectedAction) throw new Error('审批范围与当前操作不一致')
+    if (request.status !== 'approved') throw new Error('当前操作尚未获得明确确认')
+    return { ...request }
+  }
+
   consume(id: string, expectedAction: ApprovalAction): ApprovalRequest {
     this.expireOldRequests()
     const request = this.requests.get(id)

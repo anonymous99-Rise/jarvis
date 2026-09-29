@@ -2,6 +2,7 @@
   "name": "jarvis-personal-assistant",
   "version": "0.1.0",
   "private": true,
+  "author": "宁夏希望信息产业股份有限公司",
   "description": "JARVIS personal assistant desktop demo",
   "main": "out/main/index.js",
   "type": "module",
@@ -50,8 +51,14 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "identity": null,
       "target": [
-        "dir"
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
       ]
     }
   }
